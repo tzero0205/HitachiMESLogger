@@ -227,9 +227,7 @@ namespace StackingMESLogger
                                 ResetTextboxColor(t); // ForeColor/BackColor 초기화
                             }
 
-                            // 첫 번째 바코드 박스로 포커스 이동
-                            if (barcodeTextBoxes.Count > 0)
-                                barcodeTextBoxes[0].Focus();
+                        ResetAllBarcodes();
                         }
                         else
                         {
