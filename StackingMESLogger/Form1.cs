@@ -286,7 +286,9 @@ namespace StackingMESLogger
                     }
                 };
 
-                // ★ KeyDown에서 엔터 감지만
+                // 입력 필터링 + 엔터 처리
+                tb.TextChanged += BarcodeTextChanged;
+                tb.KeyPress += Barcode_KeyPress_Filter;
                 tb.KeyDown += Barcode_KeyDown;
 
                 barcodeTextBoxes.Add(tb);
@@ -667,7 +669,11 @@ namespace StackingMESLogger
             if (cmbModelList.Items.Count == 0)
                 cmbModelList.Items.Add("No Model");
 
-            cmbModelList.SelectedIndex = 0;
+            if (!string.IsNullOrWhiteSpace(selectedModelName) && cmbModelList.Items.Contains(selectedModelName))
+                cmbModelList.SelectedItem = selectedModelName;
+            else
+                cmbModelList.SelectedIndex = 0;
+
             selectedModelName = cmbModelList.Text;
         }
 
@@ -921,12 +927,6 @@ namespace StackingMESLogger
         {
             InitializeModelList();
             UpdateBarcodeTextBoxes();
-
-            foreach (var tb in barcodeTextBoxes)
-            {
-                tb.KeyPress += Barcode_KeyPress_Filter;
-                tb.KeyDown += Barcode_KeyDown;
-            }
 
             // ★ 폼 로드시 첫 번째 바코드 텍스트박스로 포커스 이동
             if (barcodeTextBoxes.Count > 0)
