@@ -8,7 +8,7 @@
 // </auto-generated>
 //------------------------------------------------------------------------------
 
-namespace StackingMESLogger.Properties {
+namespace HitachiMESLogger.Properties {
     
     
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]

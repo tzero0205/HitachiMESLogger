@@ -1,4 +1,4 @@
-﻿namespace StackingMESLogger
+﻿namespace HitachiMESLogger
 {
     partial class ModelSettingForm
     {
@@ -68,11 +68,6 @@
             // nudBarcodeLength
             // 
             this.nudBarcodeLength.Location = new System.Drawing.Point(140, 140);
-            this.nudBarcodeLength.Maximum = new decimal(new int[] {
-            50,
-            0,
-            0,
-            0});
             this.nudBarcodeLength.Minimum = new decimal(new int[] {
             1,
             0,

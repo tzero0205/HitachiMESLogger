@@ -4,7 +4,8 @@ using System.IO;
 using System.Windows.Forms;
 using Newtonsoft.Json;
 
-namespace StackingMESLogger
+namespace HitachiMESLogger
+
 {
     public partial class ModelEditForm : Form
     {

@@ -1,4 +1,5 @@
-﻿using Newtonsoft.Json;
+﻿using HitachiMESLogger;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -16,6 +17,13 @@ namespace StackingMESLogger
         private bool prevDI1State = false;
         private bool isConnected = false;
         private bool isMonitoring = false;
+        private bool isLockGuardInternal = false;
+        private string lockedCom = "";
+        private string lockedLogPath = "";
+        private string lockedLogCopyPath = "";
+        private string lockedStackName = "STACK-1";
+        private string lockedManager = "";
+        private string lockedModelName = "";
 
         // 선택된 모델 데이터
         private string selectedModelName = "";
@@ -29,6 +37,23 @@ namespace StackingMESLogger
         public Form1()
         {
             InitializeComponent();
+            txtManager.KeyPress += TxtManager_KeyPress;
+            txtManager.TextChanged += TxtManager_TextChanged;
+            cmbCOM.DropDown += LockedComboBox_DropDown;
+            txtStackName.DropDown += LockedComboBox_DropDown;
+            cmbModelList.DropDown += LockedComboBox_DropDown;
+            cmbCOM.SelectionChangeCommitted += LockedComboBox_SelectionChangeCommitted;
+            txtStackName.SelectionChangeCommitted += LockedComboBox_SelectionChangeCommitted;
+            cmbModelList.SelectionChangeCommitted += LockedComboBox_SelectionChangeCommitted;
+            txtLogPath.KeyDown += LockedTextBox_KeyDown;
+            txtLogCopyPath.KeyDown += LockedTextBox_KeyDown;
+            txtManager.KeyDown += LockedTextBox_KeyDown;
+            txtLogPath.MouseDown += LockedTextBox_MouseDown;
+            txtLogCopyPath.MouseDown += LockedTextBox_MouseDown;
+            txtManager.MouseDown += LockedTextBox_MouseDown;
+            txtLogPath.TextChanged += LockedLogPath_TextChanged;
+            txtLogCopyPath.TextChanged += LockedLogCopyPath_TextChanged;
+            this.FormClosing += Form1_FormClosing;
             LoadSettings();
             RefreshCOMPorts();
             InitializeModelList();
@@ -40,43 +65,193 @@ namespace StackingMESLogger
         // --------------------------------------------------------------------
         private void LoadSettings()
         {
-            cmbCOM.Text = Properties.Settings.Default.LastCOM;
-            txtLogPath.Text = Properties.Settings.Default.LogPath;
+            cmbCOM.Text = HitachiMESLogger.Properties.Settings.Default.LastCOM;
+            txtLogPath.Text = HitachiMESLogger.Properties.Settings.Default.LogPath;
 
-            txtStackName.Text = Properties.Settings.Default.LastMachine ?? "";
-            txtManager.Text = Properties.Settings.Default.LastUser ?? "";
+            string lastMachine = HitachiMESLogger.Properties.Settings.Default.LastMachine ?? "STACK-1";
+            if (txtStackName.Items.Contains(lastMachine))
+                txtStackName.SelectedItem = lastMachine;
+            else
+                txtStackName.SelectedIndex = 0;
 
-            selectedModelName = Properties.Settings.Default.LastModelName ?? "No Model";
-            selectedBarcodeCount = Properties.Settings.Default.LastBarcodeQty > 0 ? Properties.Settings.Default.LastBarcodeQty : 1;
-            selectedBarcodeFormat = Properties.Settings.Default.LastBarcodeFormat ?? "";
-            selectedBarcodeLength = Properties.Settings.Default.LastBarcodeLength > 0 ? Properties.Settings.Default.LastBarcodeLength : 1;
-            txtLogCopyPath.Text = Properties.Settings.Default.LogCopyPath;
+            txtManager.Text = HitachiMESLogger.Properties.Settings.Default.LastUser ?? "";
+
+            selectedModelName = HitachiMESLogger.Properties.Settings.Default.LastModelName ?? "No Model";
+            selectedBarcodeCount = HitachiMESLogger.Properties.Settings.Default.LastBarcodeQty > 0 ? HitachiMESLogger.Properties.Settings.Default.LastBarcodeQty : 1;
+            selectedBarcodeFormat = HitachiMESLogger.Properties.Settings.Default.LastBarcodeFormat ?? "";
+            selectedBarcodeLength = HitachiMESLogger.Properties.Settings.Default.LastBarcodeLength > 0 ? HitachiMESLogger.Properties.Settings.Default.LastBarcodeLength : 1;
+            txtLogCopyPath.Text = HitachiMESLogger.Properties.Settings.Default.LogCopyPath;
 
         }
 
         private void SaveSettings()
         {
-            Properties.Settings.Default.LastCOM = cmbCOM.Text;
-            Properties.Settings.Default.LogPath = txtLogPath.Text;
+            HitachiMESLogger.Properties.Settings.Default.LastCOM = cmbCOM.Text;
+            HitachiMESLogger.Properties.Settings.Default.LogPath = txtLogPath.Text;
 
-            Properties.Settings.Default.LastMachine = txtStackName.Text;
-            Properties.Settings.Default.LastUser = txtManager.Text;
+            HitachiMESLogger.Properties.Settings.Default.LastMachine = txtStackName.Text;
+            HitachiMESLogger.Properties.Settings.Default.LastUser = txtManager.Text;
 
-            Properties.Settings.Default.LastModelName = selectedModelName;
-            Properties.Settings.Default.LastBarcodeQty = selectedBarcodeCount;
-            Properties.Settings.Default.LastBarcodeFormat = selectedBarcodeFormat;
-            Properties.Settings.Default.LastBarcodeLength = selectedBarcodeLength;
-            Properties.Settings.Default.LogCopyPath = txtLogCopyPath.Text;
+            HitachiMESLogger.Properties.Settings.Default.LastModelName = selectedModelName;
+            HitachiMESLogger.Properties.Settings.Default.LastBarcodeQty = selectedBarcodeCount;
+            HitachiMESLogger.Properties.Settings.Default.LastBarcodeFormat = selectedBarcodeFormat;
+            HitachiMESLogger.Properties.Settings.Default.LastBarcodeLength = selectedBarcodeLength;
+            HitachiMESLogger.Properties.Settings.Default.LogCopyPath = txtLogCopyPath.Text;
 
 
-            Properties.Settings.Default.Save();
+            HitachiMESLogger.Properties.Settings.Default.Save();
 
         }
+        private void SaveLastUsedModelName()
+        {
+            string modelName = cmbModelList.SelectedItem?.ToString() ?? selectedModelName ?? "No Model";
+            if (string.IsNullOrWhiteSpace(modelName))
+                modelName = "No Model";
+
+            selectedModelName = modelName;
+            HitachiMESLogger.Properties.Settings.Default.LastModelName = modelName;
+            HitachiMESLogger.Properties.Settings.Default.Save();
+        }
+
+        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            SaveSettings();
+        }
+
+
+       
 
         private void btnSaveSettings_Click(object sender, EventArgs e)
         {
             SaveSettings();
             MessageBox.Show("Settings saved.");
+        }
+
+        private void TxtManager_KeyPress(object sender, KeyPressEventArgs e)
+        {
+            if (IsInputLocked())
+            {
+                e.Handled = true;
+                ShowInputLockedError();
+                return;
+            }
+
+            if (!char.IsControl(e.KeyChar) && !char.IsDigit(e.KeyChar))
+                e.Handled = true;
+        }
+
+        private void TxtManager_TextChanged(object sender, EventArgs e)
+        {
+            if (isLockGuardInternal) return;
+
+            if (IsInputLocked())
+            {
+                isLockGuardInternal = true;
+                txtManager.Text = lockedManager;
+                txtManager.SelectionStart = txtManager.Text.Length;
+                isLockGuardInternal = false;
+                return;
+            }
+
+            string digitsOnly = new string(txtManager.Text.Where(char.IsDigit).ToArray());
+            if (txtManager.Text == digitsOnly) return;
+
+            int cursor = txtManager.SelectionStart;
+            txtManager.Text = digitsOnly;
+            txtManager.SelectionStart = Math.Min(cursor, txtManager.Text.Length);
+        }
+
+        private bool IsInputLocked()
+        {
+            return isMonitoring;
+        }
+
+        private void ShowInputLockedError()
+        {
+            MessageBox.Show("PLEASE CHANGE TO STOP MODE.", "ERROR", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+
+        private void CaptureLockedInputValues()
+        {
+            lockedCom = cmbCOM.Text;
+            lockedLogPath = txtLogPath.Text;
+            lockedLogCopyPath = txtLogCopyPath.Text;
+            lockedStackName = txtStackName.Text;
+            lockedManager = txtManager.Text;
+            lockedModelName = cmbModelList.Text;
+        }
+
+        private void SetInputLockState(bool locked)
+        {
+            txtLogPath.ReadOnly = locked;
+            txtLogCopyPath.ReadOnly = locked;
+            txtManager.ReadOnly = locked;
+        }
+
+        private void LockedTextBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (!IsInputLocked()) return;
+
+            e.SuppressKeyPress = true;
+            e.Handled = true;
+            ShowInputLockedError();
+        }
+
+        private void LockedTextBox_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (!IsInputLocked()) return;
+            ShowInputLockedError();
+        }
+
+        private void LockedLogPath_TextChanged(object sender, EventArgs e)
+        {
+            if (!IsInputLocked() || isLockGuardInternal) return;
+            if (txtLogPath.Text == lockedLogPath) return;
+
+            isLockGuardInternal = true;
+            txtLogPath.Text = lockedLogPath;
+            txtLogPath.SelectionStart = txtLogPath.Text.Length;
+            isLockGuardInternal = false;
+            ShowInputLockedError();
+        }
+
+        private void LockedLogCopyPath_TextChanged(object sender, EventArgs e)
+        {
+            if (!IsInputLocked() || isLockGuardInternal) return;
+            if (txtLogCopyPath.Text == lockedLogCopyPath) return;
+
+            isLockGuardInternal = true;
+            txtLogCopyPath.Text = lockedLogCopyPath;
+            txtLogCopyPath.SelectionStart = txtLogCopyPath.Text.Length;
+            isLockGuardInternal = false;
+            ShowInputLockedError();
+        }
+
+        private void LockedComboBox_DropDown(object sender, EventArgs e)
+        {
+            if (!IsInputLocked()) return;
+
+            ComboBox combo = sender as ComboBox;
+            if (combo != null)
+                combo.DroppedDown = false;
+
+            ShowInputLockedError();
+        }
+
+        private void LockedComboBox_SelectionChangeCommitted(object sender, EventArgs e)
+        {
+            if (!IsInputLocked() || isLockGuardInternal) return;
+
+            ComboBox combo = sender as ComboBox;
+            if (combo == null) return;
+
+            isLockGuardInternal = true;
+            if (combo == cmbCOM) combo.Text = lockedCom;
+            else if (combo == txtStackName) combo.Text = lockedStackName;
+            else if (combo == cmbModelList) combo.Text = lockedModelName;
+            isLockGuardInternal = false;
+
+            ShowInputLockedError();
         }
 
         // --------------------------------------------------------------------
@@ -87,7 +262,7 @@ namespace StackingMESLogger
             cmbCOM.Items.Clear();
             cmbCOM.Items.AddRange(SerialPort.GetPortNames());
 
-            string lastCom = Properties.Settings.Default.LastCOM;
+            string lastCom = HitachiMESLogger.Properties.Settings.Default.LastCOM;
             if (!string.IsNullOrEmpty(lastCom) && cmbCOM.Items.Contains(lastCom))
                 cmbCOM.Text = lastCom;
             else if (cmbCOM.Items.Count > 0)
@@ -96,6 +271,11 @@ namespace StackingMESLogger
 
         private void btnRefreshCOM_Click(object sender, EventArgs e)
         {
+            if (IsInputLocked())
+            {
+                ShowInputLockedError();
+                return;
+            }
             RefreshCOMPorts();
         }
 
@@ -128,6 +308,7 @@ namespace StackingMESLogger
             {
                 isMonitoring = false;
                 isConnected = false;
+                SetInputLockState(false);
 
                 if (serialPort != null && serialPort.IsOpen)
                     serialPort.Close();
@@ -157,6 +338,8 @@ namespace StackingMESLogger
                 MessageBox.Show("Selected model's barcode settings are invalid.");
                 return;
             }
+            CaptureLockedInputValues();
+            SetInputLockState(true);
             barcodeTextBoxes[0].Focus();
             isMonitoring = true;
             prevDI1State = false;
@@ -173,6 +356,7 @@ namespace StackingMESLogger
         private void btnStop_Click(object sender, EventArgs e)
         {
             isMonitoring = false;
+            SetInputLockState(false);
 
             // 상태 표시
             lblProgramStatus.Text = "STOP";
@@ -227,7 +411,9 @@ namespace StackingMESLogger
                                 ResetTextboxColor(t); // ForeColor/BackColor 초기화
                             }
 
-                        ResetAllBarcodes();
+                            // 첫 번째 바코드 박스로 포커스 이동
+                            if (barcodeTextBoxes.Count > 0)
+                                barcodeTextBoxes[0].Focus();
                         }
                         else
                         {
@@ -360,6 +546,26 @@ namespace StackingMESLogger
                 if (!ValidateSingleBarcode(tb.Text)) return false;
             }
             return true;
+        }
+
+        private bool LogCopyFileExistsForBarcode(string barcode)
+        {
+            string logCopyPath = txtLogCopyPath.Text.Trim();
+            if (string.IsNullOrEmpty(logCopyPath) || string.IsNullOrEmpty(barcode) || !Directory.Exists(logCopyPath))
+                return false;
+
+            string expectedSuffix = $"_{barcode}.txt";
+
+            try
+            {
+                return Directory.EnumerateFiles(logCopyPath, $"*{expectedSuffix}", SearchOption.AllDirectories)
+                    .Any(file => Path.GetFileName(file).EndsWith(expectedSuffix, StringComparison.OrdinalIgnoreCase));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Failed to check Log Copy folder: " + ex.Message, "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
         }
         // --------------------------------------------------------------------
         // Log File 생성
@@ -665,7 +871,12 @@ namespace StackingMESLogger
             if (cmbModelList.Items.Count == 0)
                 cmbModelList.Items.Add("No Model");
 
-            cmbModelList.SelectedIndex = 0;
+            if (!string.IsNullOrWhiteSpace(selectedModelName) && cmbModelList.Items.Contains(selectedModelName))
+                cmbModelList.SelectedItem = selectedModelName;
+            else
+                cmbModelList.SelectedIndex = 0;
+
+
             selectedModelName = cmbModelList.Text;
         }
 
@@ -675,8 +886,15 @@ namespace StackingMESLogger
         // --------------------------------------------------------------------
         private void btnLoadModel_Click(object sender, EventArgs e)
         {
+            if (IsInputLocked())
+            {
+                ShowInputLockedError();
+                return;
+            }
+
             string modelName = cmbModelList.SelectedItem?.ToString() ?? "No Model";
             selectedModelName = modelName;
+            SaveLastUsedModelName();
 
             if (modelName == "No Model")
             {
@@ -754,6 +972,12 @@ namespace StackingMESLogger
 
         private void btnBrowseLogCopy_Click(object sender, EventArgs e)
         {
+            if (IsInputLocked())
+            {
+                ShowInputLockedError();
+                return;
+            }
+
             using (FolderBrowserDialog dialog = new FolderBrowserDialog())
             {
                 if (dialog.ShowDialog() == DialogResult.OK)
@@ -761,8 +985,8 @@ namespace StackingMESLogger
                     txtLogCopyPath.Text = dialog.SelectedPath;
 
                     // 자동 저장
-                    Properties.Settings.Default.LogCopyPath = txtLogCopyPath.Text;
-                    Properties.Settings.Default.Save();
+                    HitachiMESLogger.Properties.Settings.Default.LogCopyPath = txtLogCopyPath.Text;
+                    HitachiMESLogger.Properties.Settings.Default.Save();
 
                     MessageBox.Show("Log Copy directory saved.");
                 }
@@ -833,6 +1057,12 @@ namespace StackingMESLogger
 
         private void btnBrowsePath_Click(object sender, EventArgs e)
         {
+            if (IsInputLocked())
+            {
+                ShowInputLockedError();
+                return;
+            }
+
             using (FolderBrowserDialog dlg = new FolderBrowserDialog())
             {
                 dlg.Description = "Select Log Folder";
@@ -907,8 +1137,8 @@ namespace StackingMESLogger
                 return;
             }
 
-           lblStatusDO.Text = currentDO1State ? "DO : ON" : "DO : OFF";
-           lblStatusDO.ForeColor = currentDO1State ? Color.Green : Color.Red;
+            lblStatusDO.Text = currentDO1State ? "DO : ON" : "DO : OFF";
+            lblStatusDO.ForeColor = currentDO1State ? Color.Green : Color.Red;
         }
 
 
@@ -960,7 +1190,7 @@ namespace StackingMESLogger
         }
 
 
-  
+
 
         // 클래스 멤버에 추가
         private bool isHandlingBarcode = false;
@@ -1023,7 +1253,11 @@ namespace StackingMESLogger
                     isInternalChange = false;
                     return;
                 }
-
+                if (LogCopyFileExistsForBarcode(data))
+                {
+                    ShowErrorAndReset(tb, "THIS BARCODE ALREADY EXISTS IN LOGCOPY, PLEASE CHECK AGAIN!");
+                    return;
+                }
                 // 정상 바코드 표시
                 tb.BackColor = Color.LightGreen;
                 tb.ForeColor = Color.Black;
