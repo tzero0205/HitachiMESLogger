@@ -27,7 +27,7 @@
             this.btnBrowsePath = new System.Windows.Forms.Button();
             this.btnStart = new System.Windows.Forms.Button();
             this.btnStop = new System.Windows.Forms.Button();
-            this.txtStackName = new System.Windows.Forms.ComboBox();
+            this.txtStackName = new System.Windows.Forms.TextBox();
             this.txtManager = new System.Windows.Forms.TextBox();
             this.btnSaveSettings = new System.Windows.Forms.Button();
             this.cmbModelList = new System.Windows.Forms.ComboBox();
@@ -137,14 +137,9 @@
             // 
             // txtStackName
             // 
-            this.txtStackName.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.txtStackName.FormattingEnabled = true;
-            this.txtStackName.Items.AddRange(new object[] {
-            "STACK-1",
-            "STACK-2"});
             this.txtStackName.Location = new System.Drawing.Point(88, 251);
             this.txtStackName.Name = "txtStackName";
-            this.txtStackName.Size = new System.Drawing.Size(188, 20);
+            this.txtStackName.Size = new System.Drawing.Size(188, 21);
             this.txtStackName.TabIndex = 7;
             // 
             // txtManager
@@ -376,7 +371,7 @@
         private System.Windows.Forms.Button btnBrowsePath;
         private System.Windows.Forms.Button btnStart;
         private System.Windows.Forms.Button btnStop;
-        private System.Windows.Forms.ComboBox txtStackName;
+        private System.Windows.Forms.TextBox txtStackName;
         private System.Windows.Forms.TextBox txtManager;
         private System.Windows.Forms.Button btnSaveSettings;
         private System.Windows.Forms.ComboBox cmbModelList;

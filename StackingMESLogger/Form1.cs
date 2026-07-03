@@ -21,7 +21,7 @@ namespace StackingMESLogger
         private string lockedCom = "";
         private string lockedLogPath = "";
         private string lockedLogCopyPath = "";
-        private string lockedStackName = "STACK-1";
+        private string lockedStackName = "";
         private string lockedManager = "";
         private string lockedModelName = "";
 
@@ -40,19 +40,20 @@ namespace StackingMESLogger
             txtManager.KeyPress += TxtManager_KeyPress;
             txtManager.TextChanged += TxtManager_TextChanged;
             cmbCOM.DropDown += LockedComboBox_DropDown;
-            txtStackName.DropDown += LockedComboBox_DropDown;
             cmbModelList.DropDown += LockedComboBox_DropDown;
             cmbCOM.SelectionChangeCommitted += LockedComboBox_SelectionChangeCommitted;
-            txtStackName.SelectionChangeCommitted += LockedComboBox_SelectionChangeCommitted;
             cmbModelList.SelectionChangeCommitted += LockedComboBox_SelectionChangeCommitted;
             txtLogPath.KeyDown += LockedTextBox_KeyDown;
             txtLogCopyPath.KeyDown += LockedTextBox_KeyDown;
+            txtStackName.KeyDown += LockedTextBox_KeyDown;
             txtManager.KeyDown += LockedTextBox_KeyDown;
             txtLogPath.MouseDown += LockedTextBox_MouseDown;
             txtLogCopyPath.MouseDown += LockedTextBox_MouseDown;
+            txtStackName.MouseDown += LockedTextBox_MouseDown;
             txtManager.MouseDown += LockedTextBox_MouseDown;
             txtLogPath.TextChanged += LockedLogPath_TextChanged;
             txtLogCopyPath.TextChanged += LockedLogCopyPath_TextChanged;
+            txtStackName.TextChanged += LockedStackName_TextChanged;
             this.FormClosing += Form1_FormClosing;
             LoadSettings();
             RefreshCOMPorts();
@@ -68,11 +69,7 @@ namespace StackingMESLogger
             cmbCOM.Text = HitachiMESLogger.Properties.Settings.Default.LastCOM;
             txtLogPath.Text = HitachiMESLogger.Properties.Settings.Default.LogPath;
 
-            string lastMachine = HitachiMESLogger.Properties.Settings.Default.LastMachine ?? "STACK-1";
-            if (txtStackName.Items.Contains(lastMachine))
-                txtStackName.SelectedItem = lastMachine;
-            else
-                txtStackName.SelectedIndex = 0;
+            txtStackName.Text = HitachiMESLogger.Properties.Settings.Default.LastMachine ?? "";
 
             txtManager.Text = HitachiMESLogger.Properties.Settings.Default.LastUser ?? "";
 
@@ -185,6 +182,7 @@ namespace StackingMESLogger
         {
             txtLogPath.ReadOnly = locked;
             txtLogCopyPath.ReadOnly = locked;
+            txtStackName.ReadOnly = locked;
             txtManager.ReadOnly = locked;
         }
 
@@ -227,6 +225,18 @@ namespace StackingMESLogger
             ShowInputLockedError();
         }
 
+        private void LockedStackName_TextChanged(object sender, EventArgs e)
+        {
+            if (!IsInputLocked() || isLockGuardInternal) return;
+            if (txtStackName.Text == lockedStackName) return;
+
+            isLockGuardInternal = true;
+            txtStackName.Text = lockedStackName;
+            txtStackName.SelectionStart = txtStackName.Text.Length;
+            isLockGuardInternal = false;
+            ShowInputLockedError();
+        }
+
         private void LockedComboBox_DropDown(object sender, EventArgs e)
         {
             if (!IsInputLocked()) return;
@@ -247,7 +257,6 @@ namespace StackingMESLogger
 
             isLockGuardInternal = true;
             if (combo == cmbCOM) combo.Text = lockedCom;
-            else if (combo == txtStackName) combo.Text = lockedStackName;
             else if (combo == cmbModelList) combo.Text = lockedModelName;
             isLockGuardInternal = false;
 
@@ -338,6 +347,14 @@ namespace StackingMESLogger
                 MessageBox.Show("Selected model's barcode settings are invalid.");
                 return;
             }
+
+            if (string.IsNullOrWhiteSpace(txtStackName.Text))
+            {
+                MessageBox.Show("Equipment ID is required.");
+                txtStackName.Focus();
+                return;
+            }
+
             CaptureLockedInputValues();
             SetInputLockState(true);
             barcodeTextBoxes[0].Focus();
@@ -598,10 +615,9 @@ namespace StackingMESLogger
 
             string stackName = txtStackName.Text.Trim();
             string manager = txtManager.Text.Trim();
-            if (string.IsNullOrWhiteSpace(stackName)) stackName = "STACK-1";
             if (string.IsNullOrWhiteSpace(manager)) manager = "manager";
 
-            string content = $"ATE,L,{stackName},STACK,{barcode},1,1,{timestamp},{manager}";
+            string content = $"ATE,L,{stackName},ATE,{barcode},1,1,{timestamp},{manager}";
 
             try
             {
