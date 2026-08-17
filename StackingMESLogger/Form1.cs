@@ -14,11 +14,14 @@ namespace StackingMESLogger
     public partial class Form1 : Form
     {
         private SerialPort serialPort;
+        private SerialPort scannerSerialPort;
+        private string scannerReceiveBuffer = "";
         private bool prevDI1State = false;
         private bool isConnected = false;
         private bool isMonitoring = false;
         private bool isLockGuardInternal = false;
         private string lockedCom = "";
+        private string lockedScannerCom = "";
         private string lockedLogPath = "";
         private string lockedLogCopyPath = "";
         private string lockedStackName = "";
@@ -40,8 +43,10 @@ namespace StackingMESLogger
             txtManager.KeyPress += TxtManager_KeyPress;
             txtManager.TextChanged += TxtManager_TextChanged;
             cmbCOM.DropDown += LockedComboBox_DropDown;
+            cmbScannerCOM.DropDown += LockedComboBox_DropDown;
             cmbModelList.DropDown += LockedComboBox_DropDown;
             cmbCOM.SelectionChangeCommitted += LockedComboBox_SelectionChangeCommitted;
+            cmbScannerCOM.SelectionChangeCommitted += LockedComboBox_SelectionChangeCommitted;
             cmbModelList.SelectionChangeCommitted += LockedComboBox_SelectionChangeCommitted;
             txtLogPath.KeyDown += LockedTextBox_KeyDown;
             txtLogCopyPath.KeyDown += LockedTextBox_KeyDown;
@@ -67,6 +72,7 @@ namespace StackingMESLogger
         private void LoadSettings()
         {
             cmbCOM.Text = HitachiMESLogger.Properties.Settings.Default.LastCOM;
+            cmbScannerCOM.Text = HitachiMESLogger.Properties.Settings.Default.LastScannerCOM;
             txtLogPath.Text = HitachiMESLogger.Properties.Settings.Default.LogPath;
 
             txtStackName.Text = HitachiMESLogger.Properties.Settings.Default.LastMachine ?? "";
@@ -84,6 +90,7 @@ namespace StackingMESLogger
         private void SaveSettings()
         {
             HitachiMESLogger.Properties.Settings.Default.LastCOM = cmbCOM.Text;
+            HitachiMESLogger.Properties.Settings.Default.LastScannerCOM = cmbScannerCOM.Text;
             HitachiMESLogger.Properties.Settings.Default.LogPath = txtLogPath.Text;
 
             HitachiMESLogger.Properties.Settings.Default.LastMachine = txtStackName.Text;
@@ -113,6 +120,7 @@ namespace StackingMESLogger
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
             SaveSettings();
+            CloseScannerSerialPort();
         }
 
 
@@ -171,6 +179,7 @@ namespace StackingMESLogger
         private void CaptureLockedInputValues()
         {
             lockedCom = cmbCOM.Text;
+            lockedScannerCom = cmbScannerCOM.Text;
             lockedLogPath = txtLogPath.Text;
             lockedLogCopyPath = txtLogCopyPath.Text;
             lockedStackName = txtStackName.Text;
@@ -257,6 +266,7 @@ namespace StackingMESLogger
 
             isLockGuardInternal = true;
             if (combo == cmbCOM) combo.Text = lockedCom;
+            else if (combo == cmbScannerCOM) combo.Text = lockedScannerCom;
             else if (combo == cmbModelList) combo.Text = lockedModelName;
             isLockGuardInternal = false;
 
@@ -268,14 +278,26 @@ namespace StackingMESLogger
         // --------------------------------------------------------------------
         private void RefreshCOMPorts()
         {
-            cmbCOM.Items.Clear();
-            cmbCOM.Items.AddRange(SerialPort.GetPortNames());
+            string[] portNames = SerialPort.GetPortNames();
 
-            string lastCom = HitachiMESLogger.Properties.Settings.Default.LastCOM;
-            if (!string.IsNullOrEmpty(lastCom) && cmbCOM.Items.Contains(lastCom))
-                cmbCOM.Text = lastCom;
-            else if (cmbCOM.Items.Count > 0)
-                cmbCOM.SelectedIndex = 0;
+            RefreshCOMCombo(cmbCOM, portNames, HitachiMESLogger.Properties.Settings.Default.LastCOM);
+            RefreshCOMCombo(cmbScannerCOM, portNames, HitachiMESLogger.Properties.Settings.Default.LastScannerCOM);
+        }
+
+        private void RefreshCOMCombo(ComboBox comboBox, string[] portNames, string lastCom)
+        {
+            string currentText = comboBox.Text;
+            comboBox.Items.Clear();
+            comboBox.Items.AddRange(portNames);
+
+            if (!string.IsNullOrEmpty(lastCom) && comboBox.Items.Contains(lastCom))
+                comboBox.Text = lastCom;
+            else if (!string.IsNullOrEmpty(currentText) && comboBox.Items.Contains(currentText))
+                comboBox.Text = currentText;
+            else if (comboBox.Items.Count > 0)
+                comboBox.SelectedIndex = 0;
+            else
+                comboBox.Text = "";
         }
 
         private void btnRefreshCOM_Click(object sender, EventArgs e)
@@ -301,6 +323,13 @@ namespace StackingMESLogger
                 serialPort = new SerialPort(cmbCOM.Text, 9600, Parity.None, 8, StopBits.One);
                 serialPort.Open();
 
+                if (!OpenScannerSerialPort())
+                {
+                    if (serialPort.IsOpen)
+                        serialPort.Close();
+                    return;
+                }
+
                 isConnected = true;
                 lblStatusCOM.Text = "COM Port Connected";
                 Console.WriteLine($"[INFO] COM Port Connected: {cmbCOM.Text}");
@@ -319,6 +348,8 @@ namespace StackingMESLogger
                 isConnected = false;
                 SetInputLockState(false);
 
+                CloseScannerSerialPort();
+
                 if (serialPort != null && serialPort.IsOpen)
                     serialPort.Close();
 
@@ -329,6 +360,94 @@ namespace StackingMESLogger
             {
                 MessageBox.Show($"COM disconnect failed: {ex.Message}");
             }
+        }
+
+
+        private bool OpenScannerSerialPort()
+        {
+            if (string.IsNullOrWhiteSpace(cmbScannerCOM.Text))
+            {
+                MessageBox.Show("CHECK SCANNER COM PORT.");
+                return false;
+            }
+
+            if (cmbScannerCOM.Text == cmbCOM.Text)
+            {
+                MessageBox.Show("Scanner COM port must be different from PLC COM port.");
+                return false;
+            }
+
+            CloseScannerSerialPort();
+
+            scannerReceiveBuffer = "";
+            scannerSerialPort = new SerialPort(cmbScannerCOM.Text, 9600, Parity.None, 8, StopBits.One)
+            {
+                NewLine = "\r"
+            };
+            scannerSerialPort.DataReceived += ScannerSerialPort_DataReceived;
+            scannerSerialPort.Open();
+            Console.WriteLine($"[INFO] Scanner COM Port Connected: {cmbScannerCOM.Text}");
+            return true;
+        }
+
+        private void CloseScannerSerialPort()
+        {
+            if (scannerSerialPort == null) return;
+
+            scannerSerialPort.DataReceived -= ScannerSerialPort_DataReceived;
+            if (scannerSerialPort.IsOpen)
+                scannerSerialPort.Close();
+            scannerSerialPort.Dispose();
+            scannerSerialPort = null;
+            scannerReceiveBuffer = "";
+        }
+
+        private void ScannerSerialPort_DataReceived(object sender, SerialDataReceivedEventArgs e)
+        {
+            try
+            {
+                SerialPort scannerPort = sender as SerialPort;
+                if (scannerPort == null) return;
+
+                string incoming = scannerPort.ReadExisting();
+                if (string.IsNullOrEmpty(incoming)) return;
+
+                scannerReceiveBuffer += incoming;
+                int terminatorIndex;
+                while ((terminatorIndex = scannerReceiveBuffer.IndexOfAny(new[] { '\r', '\n' })) >= 0)
+                {
+                    string barcode = scannerReceiveBuffer.Substring(0, terminatorIndex);
+                    scannerReceiveBuffer = scannerReceiveBuffer.Substring(terminatorIndex + 1).TrimStart('\r', '\n');
+                    ProcessScannerBarcode(barcode);
+                }
+
+                string normalizedBuffer = new string(scannerReceiveBuffer.Where(char.IsLetterOrDigit).ToArray());
+                if (selectedBarcodeLength > 0 && normalizedBuffer.Length >= selectedBarcodeLength)
+                {
+                    ProcessScannerBarcode(normalizedBuffer.Substring(0, selectedBarcodeLength));
+                    scannerReceiveBuffer = normalizedBuffer.Substring(selectedBarcodeLength);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[ERROR] Scanner read failed: {ex.Message}");
+            }
+        }
+
+        private void ProcessScannerBarcode(string barcode)
+        {
+            barcode = new string((barcode ?? "").Where(char.IsLetterOrDigit).ToArray());
+            if (string.IsNullOrEmpty(barcode)) return;
+
+            BeginInvoke((MethodInvoker)(() =>
+            {
+                TextBox target = barcodeTextBoxes.FirstOrDefault(t => string.IsNullOrWhiteSpace(t.Text)) ?? barcodeTextBoxes.FirstOrDefault();
+                if (target == null) return;
+
+                target.Text = barcode;
+                target.SelectionStart = target.Text.Length;
+                HandleBarcodeCompleted(target);
+            }));
         }
 
         // --------------------------------------------------------------------
@@ -1299,6 +1418,8 @@ namespace StackingMESLogger
         // 공통 메시지 + 초기화 함수
         private void ShowErrorAndReset(TextBox tb, string message)
         {
+            if (tb == null) return;
+
             // 텍스트 초기화 및 색상
             isInternalChange = true;
             tb.Text = "";
