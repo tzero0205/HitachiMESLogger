@@ -8,6 +8,9 @@
     <Setting Name="LogPath" Type="System.String" Scope="User">
       <Value Profile="(Default)" />
     </Setting>
+    <Setting Name="LastScannerCOM" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
+    </Setting>
     <Setting Name="LastMachine" Type="System.String" Scope="User">
       <Value Profile="(Default)" />
     </Setting>
